@@ -19,10 +19,23 @@
 //void TimerCheck()
 
 volatile int timestamp = 0;
-bool test = true;
 
+volatile float OV_count = 0;
+
+volatile bool state = false;
+
+volatile float count = 0;
+
+volatile float Rcount = 0;
+
+bool test = true;
+uint16_t period = 48000;
 void setup() {
   // put your setup code here, to run once:
+
+Serial.begin(115200);
+pinMode(LED,OUTPUT);
+digitalWrite(LED,LOW);
 
 PLLClockConfigure();
 
@@ -35,19 +48,19 @@ TimerConfigure();
 
 void loop() {
   // put your main code here, to run repeatedly:
-  
-if(test){
-  delay(10);
-  TimerCheck();
-  test = false;
-}
+
 }
 
 void TimerCheck(){
-  timestamp = TC5->COUNT16.COUNT.reg;
-  Serial.print('Timestamp:  ');
-  Serial.println(timestamp);
-  TC5->COUNT16.COUNT.reg = 0;
+// Step 1: Issue READYSYNC command
+TCC2->CTRLBSET.reg = TCC_CTRLBSET_CMD_READSYNC;
+
+// Step 2: Wait until the command is fully executed
+while (TCC2->SYNCBUSY.bit.CTRLB); // or while (TCC2->SYNCBUSY.reg);
+  uint16_t count = TCC2->COUNT.reg;
+  float Rcount = (float)count + (OV_count*48000);
+  Serial.print("Counter: ");
+  Serial.println(Rcount);
 }
 void PLLClockConfigure(){
 // Set up the generic clock (GCLK 4) used to clock timers
@@ -109,11 +122,54 @@ void TimerConfigure(){
   // Divide counter by 1 giving 96 MHz (10.42 ns) on each TCC2 tick
   TCC2->CTRLA.reg |= TCC_CTRLA_PRESCALER(TCC_CTRLA_PRESCALER_DIV1_Val);
 
-  // Use "Normal PWM" (single-slope PWM): count up to PER, match on CC[n]
-  TCC2->WAVE.reg = TCC_WAVE_WAVEGEN_NPWM;         // Select NPWM as waveform
+    TCC2->WAVE.reg = TCC_WAVE_WAVEGEN_NFRQ;         // Select NFRQ as waveform
   while (TCC2->SYNCBUSY.bit.WAVE);                // Wait for synchronization
+  
+  // Set the period (the number to count to (TOP) before resetting timer)
+  TCC2->PER.reg = period;
+  while (TCC2->SYNCBUSY.bit.PER);
+
+  TCC2->EVCTRL.reg = TCC_EVCTRL_OVFEO; // Overflow/underflow counter event is enabled
+
+  TCC2->INTENSET.reg = TCC_INTENSET_OVF; // Enable the Overflow interrupt
+
+  NVIC_EnableIRQ(TCC2_IRQn);
+
+// Step 1: Issue READYSYNC command
+TCC2->CTRLBSET.reg = TCC_CTRLBSET_CMD_READSYNC;
+
+// Step 2: Wait until the command is fully executed
+while (TCC2->SYNCBUSY.bit.CTRLB); // or while (TCC2->SYNCBUSY.reg);
+
+
+  TCC2->CTRLA.reg |= TCC_CTRLA_ENABLE;
+  while (TCC2->SYNCBUSY.bit.ENABLE);              // Wait for synchronization
 }
 
+void TCC2_Handler(){
+
+  if (TCC2->INTFLAG.bit.OVF == 1) {  // A overflow caused the interrupt
+     //TCC2->INTFLAG.bit.OVF = 1;    // writing a one clears the flag ovf flag
+     OV_count++;
+       if(OV_count == 1){
+     // Step 1: Issue READYSYNC command
+
+       TCC2->CTRLBSET.reg = TCC_CTRLBSET_CMD_READSYNC;
+  
+  // Step 2: Wait until the command is fully executed
+        while (TCC2->SYNCBUSY.bit.CTRLB); // or while (TCC2->SYNCBUSY.reg);
+        
+        count = TCC2->COUNT.reg;
+        Rcount = (float)count + (OV_count*48000);
+        //Serial.print("Counter: ");
+        Serial.println(Rcount);
+       // digitalWrite(LED,state);
+          OV_count = 0;
+      //    state = !state;
+    }
+     TCC2->INTFLAG.bit.OVF = 1; 
+  }
+}
 
 /**************************************************************************
 Object: Configures the FDPLL to run at 96MHz using the Clock source of GCLK1
@@ -131,7 +187,8 @@ Return: Nothing
 //    .bit.WRTLOCK = false
 //  };
 //  GCLK->CLKCTRL.reg = clkctrl.reg;
-//
+
+
 //  SYSCTRL_DPLLRATIO_Type dpllratio =
 //  {
 //    .bit.LDRFRAC = 0,
