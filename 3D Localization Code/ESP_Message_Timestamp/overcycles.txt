@@ -1,0 +1,9 @@
+
+new Message Cycles - old message cycles (cycles should be the same if the messages are being sent every second)
+
+(103074833 − 79544318) = 98.043813 ms increase between messages
+
+(173832638 − 150254615) = 98.241763 ms increase between messages
+(98951432− 75344522) = 98.362125 ms increase between messages
+
+(141736841 − 118130261) = 98.36075ms increase between messages

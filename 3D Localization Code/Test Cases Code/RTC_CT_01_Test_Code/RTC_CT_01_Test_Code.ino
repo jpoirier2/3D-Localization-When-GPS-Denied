@@ -23,11 +23,11 @@ void setup() {
         Serial.flush();
         abort();
     }
+
     
-    if(rtc.lostPower()) {
         // this will adjust to the date and time at compilation
         rtc.adjust(DateTime(F(__DATE__), F(__TIME__)));
-    }
+    
     
     //we don't need the 32K Pin, so disable it
     rtc.disable32K();
@@ -51,8 +51,8 @@ void setup() {
     
     // schedule an alarm 10 seconds in the future
     if(!rtc.setAlarm1(
-            rtc.now(),
-            DS3231_A1_PerSecond // this mode triggers the alarm every second. See Doxygen for other options
+            rtc.now() + TimeSpan(10),
+            DS3231_A1_Second // this mode triggers the alarm every second. See Doxygen for other options
     )) {
         Serial.println("Error, alarm wasn't set!");
     }else {
@@ -84,7 +84,7 @@ void loop() {
         Serial.println("Alarm cleared");
     }
     
-    delay(2000);
+    delay(1000);
 }
 
 void onAlarm() {

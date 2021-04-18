@@ -11,8 +11,15 @@
 
 RTC_DS3231 rtc;
 
+
+
 // the pin that is connected to SQW
-#define CLOCK_INTERRUPT_PIN 5
+#define CLOCK_INTERRUPT_PIN 14
+
+
+double startCounter;
+double counter;
+double cpu_cycles;
 
 void setup() {
     Serial.begin(115200);
@@ -83,12 +90,11 @@ void loop() {
         rtc.clearAlarm(1);
         Serial.println("Alarm cleared");
     }
-    
-    delay(2000);
+    delay(1000);
 }
 
 void onAlarm() {
-    Serial.println("Alarm occured!");
+Serial.println("Alarm Occurred");
 }
 
 /*static uint8_t read_i2c_register(uint8_t addr, uint8_t reg) {

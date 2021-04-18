@@ -1,99 +1,189 @@
+#include <SPI.h>
+#include <RH_RF95.h>
 
-/*
- * 
- * Datasheet https://www.microchip.com/wwwproducts/en/ATSAMD21G18
- * Timer 5 and Interrupt Example  https://gist.github.com/nonsintetic/ad13e70f164801325f5f552f84306d6f
- * 
- * General SAMD timer https://www.avrfreaks.net/forum/using-internal-oscillator-not-asf
- * 
- * https://gist.github.com/jdneo/43be30d85080b175cb5aed3500d3f989
- * 
- * https://shawnhymel.com/1727/arduino-zero-samd21-fdpll-with-cmsis/
- * 
- * 
- */
-
- 
 #include <RTClib.h>
 #include <Wire.h>
 
 RTC_DS3231 rtc;
 
-#define LED 13
 
-#define TIMER_FREQ 96000000
+// Feather M0 pinout
+#define RFM95_CS 8
+#define RFM95_RST 4
+#define RFM95_INT 3
+
+#define LED 13
 
 // the pin that is connected to SQW
 #define CLOCK_INTERRUPT_PIN 5
 
+// Setting frequency (MHz)
+#define RF95_FREQ 915.0
 
-//void timerConfigure()
-//
-//void timerCheck()
+// Singleton instance of the radio driver
+RH_RF95 rf95(RFM95_CS, RFM95_INT);
 
-volatile int timestamp = 0;
+// Device ID character
+char ID[] = "A"; // This is a char array instead of a char because I spent an hour and a half trying to make it work as a char and it was a massive pain in my ass
 
-volatile float OV_count = 0;
+void broadcast(char *msg, int len, bool includeID = false);
+// Broadcasts a signal via RF95
+// msg is a pointer to a message
+// len contains the length of msg (can be obtained using sizeof(msg)/sizeof(msg[0]))
+// includeID determines whether the device ID is included at the beginning of the message
 
-volatile bool state = false;
+void blinkyBlinky(); // Literally just blinks the light to save space in main
 
-volatile int count = 0;
+volatile bool sendMessage =false;
 
-volatile float Rcount = 0;
+volatile bool state = true;
 
-volatile float startCount = 0;
+volatile int OV_count = 0;
 
-bool test = true;
-uint16_t period = 48000;
+volatile int Rcount = 0;
+
 TcCount16* TC = (TcCount16*) TC3;
 
 void setup() {
-  // put your setup code here, to run once:
+  // serial setup and radio hard-reset
+  pinMode(LED, OUTPUT); 
+  pinMode(RFM95_RST, OUTPUT); // Sets the reset pin to output
+  digitalWrite(RFM95_RST, HIGH); // Writes high to the reset pin
 
-Serial.begin(115200);
-pinMode(LED,OUTPUT);
-digitalWrite(LED,LOW);
+  Serial.begin(115200); // Starts serial transmission at a baud rate of 115200
+  // Waits for the serial console to be opened
+  // REMOVE THIS IF THE BOARD ISN'T CONNECTED TO A COMPUTER
+  while (!Serial) {
+    delay(1); // wait
+ }
+  delay(100);
 
-PLLClockConfigure();
+  // RFM95 reset
+  digitalWrite(RFM95_RST, LOW); // Resets RFM95
+  delay(10);
+  digitalWrite(RFM95_RST, HIGH);
+  delay(10);
+
+  while (!rf95.init()) {
+    Serial.println("Something's wrong. I can feel it.\nLoRa radio init failed"); // Error detection that I decided to leave in
+    while (1); // Stops the program in its tracks
+  }
+  Serial.println("LoRa radio successfully initialized");
+
+  if (!rf95.setFrequency(RF95_FREQ)) {
+    Serial.println("setFrequency failed"); // Checks if a frequency is not sent
+    while(1);
+  }
+  Serial.print("Broadcast frequency: "); Serial.println(RF95_FREQ);
+  rf95.setTxPower(23, false); // Sets power level to 23 dBm with RFO disabled
+  digitalWrite(LED, LOW);
+
+ initRTC();
+
+ PLLClockConfigure();
 
 initializeFDPLL();
 
 timerConfigure();
 
-initializeRTC();
-
-initializeAlarm();
-
 }
+
+uint8_t count = 0; // Will count the number of messages sent
 
 void loop() {
   // put your main code here, to run repeatedly:
+   if(sendMessage == true){
+  char date[10] = "hh:mm:ss";
+  char message[50] = "";
+  char mbuff[10] = "";
+  rtc.now().toString(date);
+  strcat(message,date);
+  strcat(message," cycles:");
+  itoa(Rcount,mbuff,10);
+  strcat(message,mbuff);
+  int l = sizeof(message)/sizeof(message[0]);
 
+ 
+  broadcast(message, l, true);
+  digitalWrite(LED,state);
+  state = ~state;
+  sendMessage = false;
+  }
+
+
+  
 }
 
+void onAlarm() {
+    sendMessage = true;
 
-void initializeRTC(){
-  // Initialize RTC and disable the 32k pin as we do not use it.
-      if(!rtc.begin()) {
+  count = TC->COUNT.reg;
+  Rcount = count + (OV_count*65535);
+   OV_count = 0;
+
+       if(rtc.alarmFired(1)) {
+        rtc.clearAlarm(1);
+    }
+}
+
+void broadcast(char *msg, int len, bool includeID) {
+  delay(10); // Sample code does this. Probably wouldn't hurt to wait a bit before transmission. We can remove this later if needed
+  char msgB[len+2]; // Char that includes the ID designation and the broadcasted message
+  if (includeID) {
+    //msgB[0] = ID[0];
+    //msgB[1] = '|';
+    strcpy(msgB, ID);
+    strcat(msgB, "|");
+    strcat(msgB, msg);
+    /*for (int i = 2; i<len+2; i++) {
+      msgB[i] = msg[i-2];
+    }*/
+    
+    Serial.print("Sending "); Serial.println(msgB);
+    rf95.send((uint8_t *)msgB, sizeof(msgB));  
+  }
+  else {
+    //Serial.print("msg size: "); Serial.println(sizeof(msg)/sizeof(char));
+    //Serial.print("msgB size: "); Serial.println(sizeof(msgB)/sizeof(char));
+    strcpy(msgB, msg);
+    Serial.print("Sending "); Serial.println(msg);
+    rf95.send((uint8_t *)msgB, sizeof(msgB));
+    //char realmsg[] = "Hello there";
+    //rf95.send((uint8_t *)realmsg, sizeof(realmsg));
+  }
+  Serial.println("Waiting for packet to complete...");
+  delay(10);
+  rf95.waitPacketSent(); // Waits for the package to send
+  Serial.println("Packet completed");
+}
+
+void blinkyBlinky() {
+  digitalWrite(LED, HIGH);
+  delay(100);
+  digitalWrite(LED, LOW);
+  delay(100);
+  digitalWrite(LED, HIGH);
+  delay(100);
+  digitalWrite(LED, LOW);  
+}
+
+void initRTC(){
+      // initializing the rtc
+    if(!rtc.begin()) {
         Serial.println("Couldn't find RTC!");
         Serial.flush();
         abort();
     }
+
     
-    if(rtc.lostPower()) {
         // this will adjust to the date and time at compilation
         rtc.adjust(DateTime(F(__DATE__), F(__TIME__)));
-    }
+    
     
     //we don't need the 32K Pin, so disable it
     rtc.disable32K();
-  
-}
-
-void initializeAlarm(){
-  //This function initializes the RTC's PerSecond Alarm function and attachs the interrupt to the pin we have choosen.
-
-   // Making it so, that the alarm will trigger an interrupt
+    
+    // Making it so, that the alarm will trigger an interrupt
     pinMode(CLOCK_INTERRUPT_PIN, INPUT_PULLUP);
     attachInterrupt(digitalPinToInterrupt(CLOCK_INTERRUPT_PIN), onAlarm, FALLING);
     
@@ -117,21 +207,10 @@ void initializeAlarm(){
     )) {
         Serial.println("Error, alarm wasn't set!");
     }else {
-        Serial.println("Alarm will happen every second!");  
+        Serial.println("Alarm will happen in 10 seconds!");  
     }
 }
 
-void timerCheck(){
-// Step 1: Issue READYSYNC command
-//TCC2->CTRLBSET.reg = TCC_CTRLBSET_CMD_READSYNC;
-//
-//// Step 2: Wait until the command is fully executed
-//while (TCC2->SYNCBUSY.bit.CTRLB); // or while (TCC2->SYNCBUSY.reg);
-//  uint16_t count = TCC2->COUNT.reg;
-//  float Rcount = (float)count + (OV_count*48000);
-//  Serial.print("Counter: ");
-//  Serial.println(Rcount);
-}
 void PLLClockConfigure(){
 // Set up the PLL to take the 48MHz clock input
 
@@ -217,25 +296,4 @@ void TC3_Handler(){
      OV_count++;
      TC->INTFLAG.bit.OVF = 1; 
   }
-}
-
-void onAlarm() {
-
-    count = TC->COUNT.reg;
-  float Rcount = (float)count + (OV_count*65535);
-//  Serial.print("Counter: ");
-//  Serial.println(Rcount);
-  OV_count = 0;
-//      char date[10] = "hh:mm:ss";
-//    rtc.now().toString(date);
-//    Serial.print(date);
-//    Serial.print("  ");
-//    Serial.print("Counter: ");
-  Serial.println(Rcount);
-
-    if(rtc.alarmFired(1)) {
-        rtc.clearAlarm(1);
-     //   Serial.println("Alarm cleared");
-    }
-    
 }

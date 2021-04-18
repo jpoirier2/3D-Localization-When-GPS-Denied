@@ -15,7 +15,7 @@ RTC_DS3231 rtc;
 #define CLOCK_INTERRUPT_PIN 5
 
 void setup() {
-    Serial.begin(115200);
+    Serial.begin(9600);
 
     // initializing the rtc
     if(!rtc.begin()) {
@@ -84,11 +84,12 @@ void loop() {
         Serial.println("Alarm cleared");
     }
     
-    delay(2000);
+    delay(500);
 }
 
 void onAlarm() {
     Serial.println("Alarm occured!");
+    
 }
 
 /*static uint8_t read_i2c_register(uint8_t addr, uint8_t reg) {

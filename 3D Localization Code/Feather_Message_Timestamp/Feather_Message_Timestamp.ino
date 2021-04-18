@@ -12,7 +12,8 @@
  * 
  * 
  */
-
+#include <SPI.h>
+#include <RH_RF95.h>
  
 #include <RTClib.h>
 #include <Wire.h>
@@ -23,25 +24,39 @@ RTC_DS3231 rtc;
 
 #define TIMER_FREQ 96000000
 
+// Feather M0 pinout
+#define RFM95_CS 8
+#define RFM95_RST 4
+#define RFM95_INT 3
+
+
+// Setting frequency (MHz)
+#define RF95_FREQ 915.0
+
 // the pin that is connected to SQW
 #define CLOCK_INTERRUPT_PIN 5
 
-
+// Singleton instance of the radio driver
+RH_RF95 rf95(RFM95_CS, RFM95_INT);
 //void timerConfigure()
 //
 //void timerCheck()
 
 volatile int timestamp = 0;
 
-volatile float OV_count = 0;
+volatile int OV_count = 0;
 
 volatile bool state = false;
 
 volatile int count = 0;
 
-volatile float Rcount = 0;
+volatile int Rcount = 0;
 
-volatile float startCount = 0;
+volatile int startCount = 0;
+
+// Device ID character
+char ID[] = "B"; // This is a char array instead of a char because I spent an hour and a half trying to make it work as a char and it was a massive pain in my ass
+
 
 bool test = true;
 uint16_t period = 48000;
@@ -52,7 +67,7 @@ void setup() {
 
 Serial.begin(115200);
 pinMode(LED,OUTPUT);
-digitalWrite(LED,LOW);
+digitalWrite(LED,HIGH);
 
 PLLClockConfigure();
 
@@ -64,13 +79,113 @@ initializeRTC();
 
 initializeAlarm();
 
+initializeLoRa();
+
+digitalWrite(LED,LOW);
+
 }
 
 void loop() {
   // put your main code here, to run repeatedly:
+      char *message;
+  int len;
+  char date[10] = "hh:mm:ss";
+  digitalWrite(LED, HIGH);
+  receiveRaw(&message);
+  digitalWrite(LED, LOW);
+  len = strlen(message);
+
+  
+    
+  if (isIdentified(message, len) && (getID(message) == ID[0])) {
+    getTimestamp();
+    Serial.print("Raw message received: "); Serial.println(message);
+    rtc.now().toString(date);
+    Serial.print(date);
+    Serial.print("\nCycles Between Seconds: "); Serial.println(Rcount); 
+  }
 
 }
 
+void getTimestamp(){
+  count = TC->COUNT.reg;
+  Rcount = count + (OV_count*65535);
+}
+void TC3_Handler(){
+
+  if (TC->INTFLAG.bit.OVF == 1) {  // A overflow caused the interrupt
+     //TC3->INTFLAG.bit.OVF = 1;    // writing a one clears the flag ovf flag
+     OV_count++;
+     TC->INTFLAG.bit.OVF = 1; 
+  }
+}
+
+void onAlarm() {
+
+//    count = TC->COUNT.reg;
+//  Rcount = count + (OV_count*65535);
+  OV_count = 0;
+    if(rtc.alarmFired(1)) {
+        rtc.clearAlarm(1);
+     //   Serial.println("Alarm cleared");
+    }
+    
+}
+
+void receiveRaw(char **msg) {
+    if (rf95.waitAvailableTimeout(1000)) {
+      char *rec = (char*)malloc(RH_RF95_MAX_MESSAGE_LEN);
+      uint8_t buf[RH_RF95_MAX_MESSAGE_LEN]; // Creating a buffer and defining its length
+      uint8_t len = sizeof(buf);
+  
+      if (rf95.recv(buf, &len)) {
+        digitalWrite(LED, HIGH); 
+        //RH_RF95::printBuffer("Received: ", buf, len);
+        //Serial.print("Got: "); Serial.println((char*)buf);
+        strcpy(rec, (char*)buf);
+        *msg = rec;
+      }
+      else {
+        Serial.println("Receive failed");  
+      }
+    }
+    else {
+      *msg = "No message";  
+    }
+}
+
+bool isIdentified(char *msg, int len) {
+  return (isalpha(msg[0])&&(msg[1]=='|'));  
+}
+
+char getID(char *msg) {
+  return msg[0];  
+}
+
+void initializeLoRa(){
+      delay(100);
+    // BEGIN LoRa Wing Setup
+    // Reset
+  digitalWrite(RFM95_RST, LOW);
+  delay(10);
+  digitalWrite(RFM95_RST, HIGH);
+  delay(10);
+
+while (!rf95.init()) {
+    Serial.println("Something's wrong, I can feel it.\nLoRa radio init failed.");
+    while (1);  
+  }
+  Serial.println("LoRa radio successfully initialized");
+
+  if (!rf95.setFrequency(RF95_FREQ)) {
+    Serial.println("setFrequency failed");
+    while(1);  
+  }
+  Serial.print("Listening frequency: "); Serial.println(RF95_FREQ);
+  rf95.setTxPower(23, false);
+
+  // LoRa Wing Initialization Complete
+}
 
 void initializeRTC(){
   // Initialize RTC and disable the 32k pin as we do not use it.
@@ -121,17 +236,8 @@ void initializeAlarm(){
     }
 }
 
-void timerCheck(){
-// Step 1: Issue READYSYNC command
-//TCC2->CTRLBSET.reg = TCC_CTRLBSET_CMD_READSYNC;
-//
-//// Step 2: Wait until the command is fully executed
-//while (TCC2->SYNCBUSY.bit.CTRLB); // or while (TCC2->SYNCBUSY.reg);
-//  uint16_t count = TCC2->COUNT.reg;
-//  float Rcount = (float)count + (OV_count*48000);
-//  Serial.print("Counter: ");
-//  Serial.println(Rcount);
-}
+
+
 void PLLClockConfigure(){
 // Set up the PLL to take the 48MHz clock input
 
@@ -208,34 +314,4 @@ void timerConfigure(){
                     TC_READREQ_ADDR(0x10);        // Offset of the 16 bit COUNT register
   while (TC->STATUS.bit.SYNCBUSY);       // Wait for (read) synchronization
 
-}
-
-void TC3_Handler(){
-
-  if (TC->INTFLAG.bit.OVF == 1) {  // A overflow caused the interrupt
-     //TC3->INTFLAG.bit.OVF = 1;    // writing a one clears the flag ovf flag
-     OV_count++;
-     TC->INTFLAG.bit.OVF = 1; 
-  }
-}
-
-void onAlarm() {
-
-    count = TC->COUNT.reg;
-  float Rcount = (float)count + (OV_count*65535);
-//  Serial.print("Counter: ");
-//  Serial.println(Rcount);
-  OV_count = 0;
-//      char date[10] = "hh:mm:ss";
-//    rtc.now().toString(date);
-//    Serial.print(date);
-//    Serial.print("  ");
-//    Serial.print("Counter: ");
-  Serial.println(Rcount);
-
-    if(rtc.alarmFired(1)) {
-        rtc.clearAlarm(1);
-     //   Serial.println("Alarm cleared");
-    }
-    
 }
