@@ -22,7 +22,7 @@ RH_RF95 rf95(RFM95_CS, RFM95_INT);
 RTC_DS3231 rtc;
 
 #define TIMER_FREQ 96000000
-#define NODE_DELAY 5 // Change this from node to node
+#define NODE_DELAY 10 // Change this from node to node
 
 // Device ID character
 char ID[] = "A"; // This is a char array instead of a char because I spent an hour and a half trying to make it work as a char and it was a massive pain in my ass
@@ -101,42 +101,9 @@ void loop() {
     strcat(date, ";");
     itoa(Rcount, i, 10);
     strcat(date, i);
-    delay(NODE_DELAY);
+    delay(NODE_DELAY)
     broadcast(date, sizeof(date)/sizeof(date[0]), true);
   }
-}
-
-void RFM95_SETUP(bool cereal) {
-  pinMode(LED, OUTPUT); 
-  pinMode(RFM95_RST, OUTPUT); // Sets the reset pin to output
-  digitalWrite(RFM95_RST, HIGH); // Writes high to the reset pin
-  Serial.begin(115200); // Starts serial transmission at a baud rate of 115200
-  // Waits for the serial console to be opened
-  // REMOVE THIS IF THE BOARD ISN'T CONNECTED TO A COMPUTER
-  while (cereal && !Serial) {
-    delay(1); // wait
-  }
-  delay(100);
-
-  // RFM95 reset
-  digitalWrite(RFM95_RST, LOW); // Resets RFM95
-  delay(10);
-  digitalWrite(RFM95_RST, HIGH);
-  delay(10);
-
-  while (!rf95.init()) {
-    Serial.println("Something's wrong. I can feel it.\nLoRa radio init failed"); // Error detection that I decided to leave in
-    while (1); // Stops the program in its tracks
-  }
-  Serial.println("LoRa radio successfully initialized");
-
-  if (!rf95.setFrequency(RF95_FREQ)) {
-    Serial.println("setFrequency failed"); // Checks if a frequency is not sent
-    while(1);
-  }
-  Serial.print("Broadcast frequency: "); Serial.println(RF95_FREQ);
-  rf95.setTxPower(23, false); // Sets power level to 23 dBm with RFO disabled
-  digitalWrite(LED, LOW);
 }
 
 void receiveRaw(char **msg) {
@@ -194,10 +161,16 @@ void broadcast(char *msg, int len, bool includeID) {
     //char realmsg[] = "Hello there";
     //rf95.send((uint8_t *)realmsg, sizeof(realmsg));
   }
-  Serial.println("Waiting for packet to complete...");
-  delay(10);
+  //Serial.println("Waiting for packet to complete...");
+  //delay(10);
   rf95.waitPacketSent(); // Waits for the package to send
   Serial.println("Packet completed");
+}
+
+void getTimestamp(){
+  count = TC->COUNT.reg;
+  Rcount = count + (OV_count*65535);
+  OV_count = 0;
 }
 
 void blinkyBlinky() {
@@ -348,14 +321,14 @@ void timerConfigure(){
 
 }
 
-/*void TC3_Handler(){
+void TC3_Handler(){
 
   if (TC->INTFLAG.bit.OVF == 1) {  // A overflow caused the interrupt
      //TC3->INTFLAG.bit.OVF = 1;    // writing a one clears the flag ovf flag
      OV_count++;
      TC->INTFLAG.bit.OVF = 1; 
   }
-}*/
+}
 
 void onAlarm() {
 
@@ -369,7 +342,7 @@ void onAlarm() {
 //    Serial.print(date);
 //    Serial.print("  ");
 //    Serial.print("Counter: ");
-  Serial.println(Rcount);
+ // Serial.println(Rcount);
 
     if(rtc.alarmFired(1)) {
         rtc.clearAlarm(1);
@@ -378,7 +351,37 @@ void onAlarm() {
     
 }
 
-void getTimestamp(){
-  count = TC->COUNT.reg;
-  Rcount = count + (OV_count*65535);
+
+
+void RFM95_SETUP(bool cereal) {
+  pinMode(LED, OUTPUT); 
+  pinMode(RFM95_RST, OUTPUT); // Sets the reset pin to output
+  digitalWrite(RFM95_RST, HIGH); // Writes high to the reset pin
+  Serial.begin(115200); // Starts serial transmission at a baud rate of 115200
+  // Waits for the serial console to be opened
+  // REMOVE THIS IF THE BOARD ISN'T CONNECTED TO A COMPUTER
+  while (cereal && !Serial) {
+    delay(1); // wait
+  }
+  delay(100);
+
+  // RFM95 reset
+  digitalWrite(RFM95_RST, LOW); // Resets RFM95
+  delay(10);
+  digitalWrite(RFM95_RST, HIGH);
+  delay(10);
+
+  while (!rf95.init()) {
+    Serial.println("Something's wrong. I can feel it.\nLoRa radio init failed"); // Error detection that I decided to leave in
+    while (1); // Stops the program in its tracks
+  }
+  Serial.println("LoRa radio successfully initialized");
+
+  if (!rf95.setFrequency(RF95_FREQ)) {
+    Serial.println("setFrequency failed"); // Checks if a frequency is not sent
+    while(1);
+  }
+  Serial.print("Broadcast frequency: "); Serial.println(RF95_FREQ);
+  rf95.setTxPower(23, false); // Sets power level to 23 dBm with RFO disabled
+  digitalWrite(LED, LOW);
 }
