@@ -29,7 +29,7 @@ RTC_DS3231 rtc;
 
 // Receiver ID
 char ID[] = "1"; // Defined as a char array for consistency with the transmitter code
-char Central_TS[50] = "";
+
 
 // Singleton instance of the radio driver
 RH_RF95 rf95(RFM95_CS, RFM95_INT);
@@ -54,6 +54,14 @@ double startCounter;
 double midCounter;
 double counterCPU;
 double overhead = 23585814;
+double temp = 0;
+uint8_t cum = 0; // C - Count
+                 // U - Unsent
+                 // M - Messages
+char date[10] = "hh:mm:ss";
+char Central_TS[50] = "";
+char Altitude[10] = "";
+char finalMessage[255] = "";
 
 void setup() {
   // put your setup code here, to run once:
@@ -136,8 +144,7 @@ while (!rf95.init()) {
 
 void loop() {
   // put your main code here, to run repeatedly:
-    char *message;
-    char date[10] = "hh:mm:ss";
+  char *message;
   int len;
   
   receiveRaw(&message);
@@ -145,16 +152,35 @@ void loop() {
   len = strlen(message);
   if (isIdentified(message, len)){
   
-  else if(isDigit(getID(message))) {
-
-    Central_TS = strcat(strcat(date,";"),counterCPU)
+  if(isDigit(getID(message))) {
+    int i = strlen(Central_TS);
+    Central_TS[i++] = ';';
+    Central_TS[i] = '\0';
+    temp = counterCPU;
+    strcpy(Altitude,message);
     
    // Serial.print(date);
    // Serial.print("\nCycles Between Seconds: "); Serial.println(counterCPU); 
   }
   else if(isalpha(getID(message))){
-    
+   
+    strcpy(finalMessage,message);
+    int i = strlen(finalMessage);
+    finalMessage[i++] = ',';
+    finalMessage[i] = '\0';
+    cum++;
   }
+  
+  }
+
+  if(cum == 4){
+    cum = 0;
+    Serial.print(Altitude);
+    Serial.print(';');
+    Serial.print(Central_TS);
+    Serial.println(temp);
+    Serial.println(finalMessage);
+  //  finalMessage[255] = "empty";
   }
     if(rtc.alarmFired(1)) {
         rtc.clearAlarm(1);
