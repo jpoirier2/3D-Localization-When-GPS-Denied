@@ -169,27 +169,9 @@ void loop() {
    // Serial.println("In else If");
     strcat(finalMessage,message);
     int i = strlen(finalMessage);
-    finalMessage[i++] = ',';
+    finalMessage[i++] = '\n';
     finalMessage[i] = '\0';
-//    firstMessage++;
-//    if(firstMessage == 1){
-//      char buf[2] = "";
-//      uint8_t hh = 00;
-//      uint8_t mm = 00;
-//      uint8_t ss = 00;
-//      buf[0] = message[2];
-//      buf[1] = message[3];
-//      hh = atoi(buf);
-//      buf[0] = message[5];
-//      buf[1] = message[6];
-//      mm = atoi(buf);
-//      buf[0] = message[8];
-//      buf[1] = message[9];
-//      ss = atoi(buf);
-//      Serial.print("RTC Old Time:"); Serial.println(rtc.now().toString(date));
-//    rtc.adjust(DateTime((uint16_t)2021,(uint8_t)4,(uint8_t)22,hh,mm,ss));
-//    Serial.print("RTC new Time:"); Serial.println(rtc.now().toString(date));
-//    }
+    
     countUnsentMessage++;
   }
   
@@ -198,13 +180,13 @@ void loop() {
   if(countUnsentMessage == 3){
     countUnsentMessage = 0;
     Serial.print(Altitude);
-    Serial.print(';');
+    Serial.println(';');
     Serial.print(finalMessage);
-    Serial.print(",D|");
+    Serial.print("D|");
     Serial.print(Central_TS);
     Serial.print(';');
     Serial.println(temp);
-   // Serial.print(finalMessage);
+   
     Serial.println("");
     strcpy(finalMessage,"");
   //  finalMessage[255] = "empty";
