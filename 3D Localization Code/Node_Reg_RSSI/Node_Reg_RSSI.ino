@@ -2,6 +2,7 @@
 #include <RH_RF95.h>
 #include <RTClib.h>
 #include <Wire.h>
+#include <math.h>
 
 // Feather M0 pinout
 #define RFM95_CS 8
@@ -22,10 +23,10 @@ RH_RF95 rf95(RFM95_CS, RFM95_INT);
 RTC_DS3231 rtc;
 
 #define TIMER_FREQ 96000000
-#define NODE_DELAY 500// Change this from node to node
+#define NODE_DELAY 100// Change this from node to node
 
 // Device ID character
-char ID[] = "C"; // This is a char array instead of a char because I spent an hour and a half trying to make it work as a char and it was a massive pain in my ass
+char ID[] = "A"; // This is a char array instead of a char because I spent an hour and a half trying to make it work as a char and it was a massive pain in my ass
 
 char TT[] = "1"; //Tracking target ID
 
@@ -56,6 +57,8 @@ void broadcast(char *msg, int len, bool includeID = false);
 
 void blinkyBlinky(); // Literally just blinks the light to save space in main
 
+float distanceRSSI(float R, float RAVG); // Computes distance and meters using the RSSI and the RSSI (average is ideal) at 1 meter 
+
 void getTimestamp();
 
 volatile int timestamp = 0;
@@ -67,6 +70,9 @@ volatile bool state = false;
 volatile int count = 0;
 
 volatile int Rcount = 0;
+
+
+volatile float unLogRSSIavg = pow(10, -22.84/20); // RSSI average converted out of dB
 
 TcCount16* TC = (TcCount16*) TC3;
 void setup() {
@@ -96,23 +102,41 @@ void loop() {
   // put your main code here, to run repeatedly:
   char *message;
   char date[20] = "hh:mm:ss"; // Must be done for formatting fo rtc.now()
+  char sendDistance[20];
   int len;
   char i[10] = ""; // 5 Might be enough
   digitalWrite(LED, HIGH);
   receiveRaw(&message);
-  getTimestamp();
-  rtc.now().toString(date);
+ // getTimestamp();
+  //rtc.now().toString(date);
   digitalWrite(LED, LOW);
   len = strlen(message);
   if (isIdentified(message, len) && (getID(message) == TT[0])) { // Checks if the message is from the target
     //Serial.print("Raw message received: "); Serial.println(message); 
    // Serial.println("IN IF STATEMENT");
-    strcat(date, ";");
-    itoa(Rcount, i, 10);
-    strcat(date, i);
-    Serial.print("After Count Cat: ");Serial.println(date);
+//    strcat(date, ";");
+//    itoa(Rcount, i, 10);
+//    strcat(date, i);
+//    Serial.print("After Count Cat: ");Serial.println(date);
+
+   float R = (float)rf95.lastRssi();
+  //  Serial.print("R variable is: ");Serial.println(R);Serial.println();
+    float unLogR = pow(10.0,R/20);
+    Serial.print("unLogR variable is: ");Serial.println(unLogR,10);Serial.println();
+    float distance = distanceRSSI(R,-22.84);
+    distance = distance ;
+    Serial.print("Distance is: "); Serial.println(distance);
+    int whole = floor(distance);
+    int decimal = floor(distance * 100) - whole * 100;
+    char mbuff[10] = "";
+    itoa(whole, mbuff, 10);
+    strcat(sendDistance, mbuff);
+    strcat(sendDistance, ".");
+    itoa(decimal, mbuff, 10);
+    strcat(sendDistance, mbuff);
     delay(NODE_DELAY);
-    broadcast(date, sizeof(date)/sizeof(date[0]), true);
+    broadcast(sendDistance, sizeof(sendDistance)/sizeof(sendDistance[0]), true);
+    strcpy(sendDistance,"");
   }
   digitalWrite(LED,HIGH);
 }
@@ -176,6 +200,15 @@ void broadcast(char *msg, int len, bool includeID) {
   delay(10);
   rf95.waitPacketSent(); // Waits for the package to send
   Serial.println("Packet completed");
+}
+
+
+float distanceRSSI(float Rin, float RAVG) {
+    float N = 4; // "Low strength" (Default of 2)
+    Serial.print("Variables are : ");Serial.print(Rin,10);Serial.print(" ");Serial.println(RAVG,10);
+    float dist = pow(10.0, (RAVG - Rin )/(10*N));
+    Serial.println(dist);
+    return dist;
 }
 
 void getTimestamp(){

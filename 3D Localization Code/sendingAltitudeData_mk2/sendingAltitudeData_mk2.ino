@@ -2,11 +2,10 @@
 #include <Wire.h>
 #include <Math.h>
 #include <RH_RF95.h>
-#include "MPL3115A2.h"
+#include <Adafruit_MPL3115A2.h>
 
-#define ALTBASIS 15
 
-MPL3115A2 baro3115;
+Adafruit_MPL3115A2 baro = Adafruit_MPL3115A2();
 
 
 // Feather M0 pinout
@@ -52,31 +51,31 @@ void setup() {
   delay(100);
 
 
-  baro3115.begin(); // Get sensor online
-
-  baro3115.setModeStandby();    // <-- this one starts a config sequence
-  baro3115.setModeBarometer();
-  baro3115.setOffsetPressure(0);
-  baro3115.setOffsetTemperature(0);
-  baro3115.setOffsetAltitude(0);
-  baro3115.setBarometricInput(0.0);
-  baro3115.elevation_offset = 0;
-  baro3115.calculated_sea_level_press = 0;
-  baro3115.setOversampleRate(7);
-  baro3115.enableEventFlags();
-  baro3115.setModeActive();   // <-- this one ends the sequence and starts the measurement mode
-
-  Serial.println("BEFORE calibration...");
-
-  Serial.println("Adafruit_MPL3115A2 test!");
-  doCalibration();
-  
-  baro3115.setModeStandby();
-  baro3115.setModeAltimeter();
-  baro3115.setOversampleRate(7);
-  baro3115.enableEventFlags();
-  baro3115.setModeActive();
-  
+  baro.begin(); // Get sensor online
+//
+//  baro3115.setModeStandby();    // <-- this one starts a config sequence
+//  baro3115.setModeBarometer();
+//  baro3115.setOffsetPressure(0);
+//  baro3115.setOffsetTemperature(0);
+//  baro3115.setOffsetAltitude(0);
+//  baro3115.setBarometricInput(0.0);
+//  baro3115.elevation_offset = 0;
+//  baro3115.calculated_sea_level_press = 0;
+//  baro3115.setOversampleRate(7);
+//  baro3115.enableEventFlags();
+//  baro3115.setModeActive();   // <-- this one ends the sequence and starts the measurement mode
+//
+//  Serial.println("BEFORE calibration...");
+//
+//  Serial.println("Adafruit_MPL3115A2 test!");
+//  doCalibration();
+//  
+//  baro3115.setModeStandby();
+//  baro3115.setModeAltimeter();
+//  baro3115.setOversampleRate(7);
+//  baro3115.enableEventFlags();
+//  baro3115.setModeActive();
+//  
   outData();
 
   // RFM95 reset
@@ -123,9 +122,9 @@ void loop() {
 
   int l = sizeof(message) / sizeof(message[0]);
   //itoa(count++, message+(l-15), 10);
-  delay(100); // Wait 1 second between transmissions (unsure if this is a requirement)de
+  delay(1000); // Wait 1 second between transmissions (unsure if this is a requirement)de
   broadcast(message, l, true);
-  // blinkyBlinky(); // Blinky blinky
+  blinkyBlinky(); // Blinky blinky
 }
 
 void broadcast(char *msg, int len, bool includeID) {
@@ -162,26 +161,26 @@ void broadcast(char *msg, int len, bool includeID) {
 void doCalibration()
 {
 
-  Serial.println("Starting pressure calibration...");
-
-  baro3115.runCalibration(ALTBASIS);
-
-  Serial.print("calculated sea level pressure: ");
-  Serial.print(baro3115.calculated_sea_level_press, 2);
-  Serial.println(" Pa");
-
-  Serial.print("calculated elevation_offset: ");
-  Serial.print(baro3115.elevation_offset, 2);
-  Serial.println(" Pa");
-
-  baro3115.setModeStandby();    // <-- this one starts a config sequence
-  baro3115.setModeBarometer();
-  baro3115.setBarometricInput(baro3115.calculated_sea_level_press);
-  baro3115.setOversampleRate(7);
-  baro3115.enableEventFlags();
-  baro3115.setModeActive();   // <-- this one ends the sequence and starts the measurement mode
-
-  Serial.println("Pressure calibration completed.");
+//  Serial.println("Starting pressure calibration...");
+//
+//  baro3115.runCalibration(ALTBASIS);
+//
+//  Serial.print("calculated sea level pressure: ");
+//  Serial.print(baro3115.calculated_sea_level_press, 2);
+//  Serial.println(" Pa");
+//
+//  Serial.print("calculated elevation_offset: ");
+//  Serial.print(baro3115.elevation_offset, 2);
+//  Serial.println(" Pa");
+//
+//  baro3115.setModeStandby();    // <-- this one starts a config sequence
+//  baro3115.setModeBarometer();
+//  baro3115.setBarometricInput(baro3115.calculated_sea_level_press);
+//  baro3115.setOversampleRate(7);
+//  baro3115.enableEventFlags();
+//  baro3115.setModeActive();   // <-- this one ends the sequence and starts the measurement mode
+//
+//  Serial.println("Pressure calibration completed.");
 
 }
 void outData()
@@ -211,7 +210,7 @@ void outData()
 //  baro3115.setOversampleRate(7);
 //  baro3115.enableEventFlags();
 //  baro3115.setModeActive();
-  altitude = baro3115.readAltitude();
+  altitude = baro.getAltitude();
 
   // Serial.print(" Altitude above sea(m): ");
   // Serial.print(altitude, 2);
